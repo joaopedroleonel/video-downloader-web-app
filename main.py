@@ -16,11 +16,11 @@ from flask_socketio import SocketIO, emit, disconnect
 
 app = Flask(__name__, static_url_path='',  static_folder='web/static', template_folder='web/')
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app, async_mode="eventlet")
 
 redis_host = os.environ.get("REDIS_HOST")
 redis_port = int(os.environ.get("REDIS_PORT"))
-r = redis.Redis(host=redis_host, port=redis_port, db=0)
+r = redis.Redis(host=redis_host, port=redis_port, db=0, decode_responses=True)
 
 authorization = Auth()
 
@@ -105,6 +105,10 @@ def initDownload():
         sessionId = authorization.decodeToken(request.cookies.get('token'), app).get('session')
         jobId = str(uuid.uuid4())
 
+        isUrl = re.match(r'^https?://[^\s/$.?#].[^\s]*$', data.get("url"))
+        if (data.get("type") not in [1, 2] or not isinstance(data.get("playlist"), bool) or not bool(isUrl)):
+            abort(400)
+
         task = {
             "uuid": jobId,
             "playlist": data.get("playlist"),
@@ -114,6 +118,7 @@ def initDownload():
         }
 
         r.hset(jobId, mapping={"status": "Aguardando para ser processado.", "session": sessionId})
+        r.expire(jobId, 1800)
         r.lpush("download_queue", json.dumps(task))
 
         return jsonify({"uuid": jobId}), 200
@@ -148,9 +153,6 @@ def checkStatus(data):
             emit('statusUpdate', {"error": "Job not found"})
             break
 
-        status = status.decode() if isinstance(status, bytes) else status  
-        sessionOwner = sessionOwner.decode() if isinstance(sessionOwner, bytes) else sessionOwner 
-
         if sessionOwner != sessionId:
             disconnect() 
 
@@ -161,7 +163,7 @@ def checkStatus(data):
         if status in ["O download do arquivo será iniciado em instantes.","O download do vídeo não pôde ser realizado."]:
             break
 
-        socketio.sleep(0.3)
+        socketio.sleep(0.5)
         
     disconnect()
     
@@ -192,7 +194,6 @@ def processWrapper(taskData):
         processDownloads(taskData)
 
 def workerLoop():
-    print("[worker] workerLoop started, waiting on BRPOP")
     while True:
         try:
             _, taskJson = r.brpop("download_queue")
@@ -204,8 +205,7 @@ def workerLoop():
             continue
         try:
             taskData = json.loads(taskJson)
-        except Exception as e:
-            print(f"[worker] invalid json: {e}")
+        except:
             continue
 
         eventlet.spawn_n(processWrapper, taskData)

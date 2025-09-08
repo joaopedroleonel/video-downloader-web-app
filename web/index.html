@@ -75,6 +75,12 @@
             document.getElementById('status').textContent = '';
         }
 
+        document.getElementById('url').addEventListener('input', function (event) {
+            if((event.target.value).toLowerCase().includes('playlist')){
+                document.getElementById('playlist').checked = true;
+            }
+        });
+
         document.getElementById('download-btn').addEventListener('click', async function () {
             const url = document.getElementById('url').value;
             const isPlaylist = document.getElementById('playlist').checked;

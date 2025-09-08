@@ -17,6 +17,9 @@ class Yt:
                 fmt = info.get('format', '')
                 frag = f"(frag {d.get('fragment_index', '?')}/{d.get('fragment_count', '?')})" if d.get('fragment_index') else '(concluindo download).'
                 self.r.hset(id, mapping={'status': f'{title}[{fmt}] {frag}', 'session': session})
+                
+                if d['downloaded_bytes'] > int(os.getenv('MAX_DOWNLOAD_BYTES')):
+                    raise Exception('Tamanho máximo permitido para download atingido.')
             elif d['status'] == 'finished':
                 info = d['info_dict']
                 title = d['info_dict'].get('title')
