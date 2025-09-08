@@ -1,0 +1,8 @@
+flask
+yt-dlp
+PyJWT
+python-dotenv
+redis
+flask-socketio
+gunicorn
+eventlet

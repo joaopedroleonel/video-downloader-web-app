@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Downloader</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link rel="shortcut icon" href="{{ url_for('static', filename='images/icon.svg') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="{{ url_for('static', filename='js/socket.io.min.js') }}"></script>
+    <meta name="robots" content="noindex, nofollow">
+</head>
+
+<body>
+    <div class="container">
+        <main>
+            <h2>Baixar vídeo</h2>
+
+            <div class="form-group" style="margin-bottom: .7rem">
+                <label for="url" class="required">URL do vídeo:</label>
+                <input type="url" id="url" placeholder="Cole o link do vídeo aqui" required>
+            </div>
+
+            <div class="form-group">
+                <div class="checkbox-container">
+                    <input type="checkbox" id="playlist">
+                    <label for="playlist">Playlist</label>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <p class="format-label">Formato:</p>
+                <div class="radio-group">
+                    <div class="radio-container">
+                        <input type="radio" id="mp4" name="format" value="1" checked>
+                        <label for="mp4">MP4</label>
+                    </div>
+                    <div class="radio-container">
+                        <input type="radio" id="mp3" name="format" value="2">
+                        <label for="mp3">MP3</label>
+                    </div>
+                </div>
+            </div>
+
+            <button id="download-btn">Baixar</button>
+
+            <p id="status"></p>
+        </main>
+    </div>
+
+    <footer>
+        <div class="footer-content">
+            <p>
+                Powered by <a href="https://github.com/yt-dlp/yt-dlp" target="_blank" rel="noopener">yt-dlp</a>
+            </p>
+            <div class="footer-links">
+                <a href="https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md">Sites suportados</a>
+                <span class="footer-separator">•</span>
+                <a href="https://github.com/yt-dlp/yt-dlp" target="_blank" rel="noopener">GitHub yt-dlp</a>
+                <span class="footer-separator">•</span>
+                <a href="https://github.com/joaopedroleonel" target="_blank" rel="noopener">GitHub do criador</a>
+            </div>
+            <p class="footer-copyright">
+                &copy; {{ year }} VideoDownloader. Todos os direitos reservados.
+            </p>
+        </div>
+    </footer>
+
+    <script>
+        function resetIu() {
+            document.getElementById('download-btn').removeAttribute('disabled');
+            document.getElementById('status').textContent = '';
+        }
+
+        document.getElementById('download-btn').addEventListener('click', async function () {
+            const url = document.getElementById('url').value;
+            const isPlaylist = document.getElementById('playlist').checked;
+            const format = document.querySelector('input[name="format"]:checked').value;
+
+            const payload = {
+                'playlist': isPlaylist,
+                'type': Number(format),
+                'url': url
+            }
+
+            if (url) {
+                try {
+                    const downloadBtn = document.getElementById('download-btn');
+                    downloadBtn.setAttribute('disabled', '');
+                    const statusElement = document.getElementById('status');
+                    statusElement.textContent = 'Conectando ao servidor.';
+
+                    const response = await fetch("/initDownload", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Accept": "application/json"
+                        },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data && data.uuid) {
+                            const socket = io();
+                            const jobId = data.uuid;
+
+                            socket.emit('checkStatus', { jobId });
+
+                            socket.on('statusUpdate', (checkData) => {
+                                if (checkData.status) {
+                                    statusElement.textContent = checkData.status;
+
+                                    if (checkData.status === 'O download do arquivo será iniciado em instantes.') {
+                                        const link = document.createElement('a');
+                                        link.href = `/download/${jobId}`;
+                                        link.download = '';
+                                        link.click();
+                                        resetIu();
+                                        socket.disconnect();
+                                    }
+
+                                    if (checkData.status === 'O download do vídeo não pôde ser realizado.') {
+                                        statusElement.textContent = 'O download do vídeo não pôde ser realizado.';
+                                        document.getElementById('download-btn').removeAttribute('disabled');
+                                        socket.disconnect();
+                                    }
+                                } else if (checkData.error) {
+                                    statusElement.textContent = 'O download do vídeo não pôde ser realizado.';
+                                    document.getElementById('download-btn').removeAttribute('disabled');
+                                    socket.disconnect();
+                                }
+                            });
+                        }
+                    } else {
+                        statusElement.textContent = 'O download do vídeo não pôde ser realizado.';
+                        document.getElementById('download-btn').removeAttribute('disabled');
+                    }
+                } catch (error) {
+                    statusElement.textContent = 'O download do vídeo não pôde ser realizado.';
+                    document.getElementById('download-btn').removeAttribute('disabled');
+                }
+            }
+        });
+    </script>
+</body>
+
+</html>
