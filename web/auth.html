@@ -36,8 +36,6 @@
             }
 
             const loginBtn = document.getElementById('login-btn');
-
-            loginBtn.innerHTML = 'Confirmando...';
             loginBtn.setAttribute('disabled', '');
 
             await fetch('/auth', {
@@ -59,7 +57,6 @@
                 document.getElementById('text-error').style.display = "block";
             })
             .finally(() => {
-                loginBtn.innerHTML = 'Confirmar';
                 loginBtn.removeAttribute('disabled');
             })
         });

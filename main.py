@@ -12,10 +12,7 @@ import re
 import uuid
 import redis
 import json
-from concurrent.futures import ThreadPoolExecutor
-from threading import Thread
 from flask_socketio import SocketIO, emit, disconnect
-import threading
 
 app = Flask(__name__, static_url_path='',  static_folder='web/static', template_folder='web/')
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
@@ -72,7 +69,8 @@ def processDownloads(taskData):
             taskData["playlist"],
             taskData["type"],
             taskData["url"],
-            jobId
+            jobId,
+            taskData["session"]
         )
     except Exception as e:
         r.hset(jobId, mapping={'status': 'O download do vídeo não pôde ser realizado.'})
@@ -104,16 +102,18 @@ def auth():
 def initDownload():
     try:
         data = request.get_json()
+        sessionId = authorization.decodeToken(request.cookies.get('token'), app).get('session')
         jobId = str(uuid.uuid4())
 
         task = {
             "uuid": jobId,
             "playlist": data.get("playlist"),
             "type": data.get("type"),
-            "url": data.get("url")
+            "url": data.get("url"),
+            "session": sessionId
         }
 
-        r.hset(jobId, mapping={"status": "Aguardando para ser processado."})
+        r.hset(jobId, mapping={"status": "Aguardando para ser processado.", "session": sessionId})
         r.lpush("download_queue", json.dumps(task))
 
         return jsonify({"uuid": jobId}), 200
@@ -133,15 +133,26 @@ def checkStatus(data):
         emit('statusUpdate', {"error": "No jobId provided"})
         return
     
+    sessionId = authorizated.get('session')
+    if not sessionId:
+        emit('statusUpdate', {"error": "No jobId provided"})
+        return
+    
     previous_status = None
 
     while True:
         status = r.hget(jobId, "status")
+        sessionOwner = r.hget(jobId, "session")
+
         if not status:
             emit('statusUpdate', {"error": "Job not found"})
             break
 
         status = status.decode() if isinstance(status, bytes) else status  
+        sessionOwner = sessionOwner.decode() if isinstance(sessionOwner, bytes) else sessionOwner 
+
+        if sessionOwner != sessionId:
+            disconnect() 
 
         if status != previous_status:
             emit('statusUpdate', {"uuid": jobId, "status": status})
