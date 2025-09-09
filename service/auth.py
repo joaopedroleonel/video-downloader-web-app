@@ -21,7 +21,7 @@ class Auth:
         return jwt.encode({
             'session': str(session),
             'iat': datetime.now(timezone.utc), 
-            'exp': datetime.now(timezone.utc) + timedelta(minutes=int(os.getenv("JWT_EXP_MINUTES")))
+            'exp': datetime.now(timezone.utc) + timedelta(minutes=int(os.getenv('JWT_EXP_MINUTES')))
         }, app.config['SECRET_KEY'], algorithm='HS256')
     
     def decodeToken(self, token, app):

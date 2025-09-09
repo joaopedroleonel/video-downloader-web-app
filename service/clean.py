@@ -11,7 +11,7 @@ class Clean:
         while True:
             basePath = "/app/files"
             now = time.time()
-            cutoff = now - (os.getenv('FILES_EXP_MINUTES') * 60)
+            cutoff = now - (int(os.getenv('FILES_EXP_MINUTES')) * 60)
             interval = 60
 
             for entry in os.listdir(basePath):

@@ -16,14 +16,14 @@ from flask_socketio import SocketIO, emit, disconnect
 
 app = Flask(__name__, static_url_path='',  static_folder='web/static', template_folder='web/')
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
-socketio = SocketIO(app, async_mode="eventlet")
+socketio = SocketIO(app, async_mode='eventlet')
 
-redis_host = os.environ.get("REDIS_HOST")
-redis_port = int(os.environ.get("REDIS_PORT"))
+redis_host = os.environ.get('REDIS_HOST')
+redis_port = int(os.environ.get('REDIS_PORT'))
 r = redis.Redis(host=redis_host, port=redis_port, db=0, decode_responses=True)
+pipe = r.pipeline()
 
-authorization = Auth()
-
+auth = Auth()
 clean = Clean()
 
 def start_cleaner():
@@ -42,38 +42,40 @@ def requireAuth(api=False):
                 if api:
                     return Response(status=401)
                 else:
-                    return redirect(url_for('auth'))
+                    return redirect(url_for('authorization'))
 
             try:
-                data = authorization.decodeToken(cookieToken, app)
+                data = auth.decodeToken(cookieToken, app)
             except Exception:
                 if api:
                     return Response(status=401)
                 else:
-                    return redirect(url_for('auth'))
+                    return redirect(url_for('authorization'))
 
             if not data.get('session'):
                 if api:
                     return Response(status=401)
                 else:
-                    return redirect(url_for('auth'))
+                    return redirect(url_for('auauthorizationth'))
 
             return func(*args, **kwargs)
         return wrapper
     return decorador
 
 def processDownloads(taskData):
-    jobId = taskData["uuid"]
+    jobId = taskData['uuid']
     try:
         Yt(r).download(
-            taskData["playlist"],
-            taskData["type"],
-            taskData["url"],
+            taskData['playlist'],
+            taskData['type'],
+            taskData['url'],
             jobId,
-            taskData["session"]
+            taskData['session']
         )
     except Exception as e:
-        r.hset(jobId, mapping={'status': 'O download do vídeo não pôde ser realizado.'})
+        pipe.expire(jobId, int(os.getenv('DATA_REDIS_EXP_SECONDS')))
+        pipe.hset(jobId, mapping={'status': 'O download do vídeo não pôde ser realizado.', 'session': taskData['session']})
+        pipe.execute()
         
 
 @app.route('/', methods=['GET'])
@@ -82,15 +84,15 @@ def home():
     return render_template('index.html', year=datetime.now().year)
 
 @app.route('/auth', methods=['GET', 'POST'])
-def auth():
+def authorization():
     if request.method == 'GET':
         return render_template('auth.html')
     else:
         try:
             password = request.get_json()['password']
-            if authorization.checkPassword(password):
+            if auth.checkPassword(password):
                 res = make_response(Response(status=200))
-                res.set_cookie('token', authorization.encodeToken(app), httponly=True) 
+                res.set_cookie('token', auth.encodeToken(app), httponly=True) 
                 return res
             else:
                 return Response(status=401)
@@ -102,74 +104,80 @@ def auth():
 def initDownload():
     try:
         data = request.get_json()
-        sessionId = authorization.decodeToken(request.cookies.get('token'), app).get('session')
+        sessionId = auth.decodeToken(request.cookies.get('token'), app).get('session')
         jobId = str(uuid.uuid4())
 
-        isUrl = re.match(r'^https?://[^\s/$.?#].[^\s]*$', data.get("url"))
-        if (data.get("type") not in [1, 2] or not isinstance(data.get("playlist"), bool) or not bool(isUrl)):
+        isUrl = re.match(r'^https?://[^\s/$.?#].[^\s]*$', data.get('url'))
+        if (data.get('type') not in [1, 2] or not isinstance(data.get('playlist'), bool) or not bool(isUrl)):
             abort(400)
 
         task = {
-            "uuid": jobId,
-            "playlist": data.get("playlist"),
-            "type": data.get("type"),
-            "url": data.get("url"),
-            "session": sessionId
+            'uuid': jobId,
+            'playlist': data.get('playlist'),
+            'type': data.get('type'),
+            'url': data.get('url'),
+            'session': sessionId
         }
 
-        r.hset(jobId, mapping={"status": "Aguardando para ser processado.", "session": sessionId})
-        r.expire(jobId, 1800)
-        r.lpush("download_queue", json.dumps(task))
+        r.hset(jobId, mapping={'status': 'Aguardando para ser processado.', 'session': sessionId})
+        r.lpush('download_queue', json.dumps(task))
 
-        return jsonify({"uuid": jobId}), 200
+        return jsonify({'uuid': jobId}), 200
     except Exception as e:
-        print(e)
         return Response(status=400)
 
 @socketio.on('checkStatus')
 def checkStatus(data):
     cookieToken = request.cookies.get('token')
-    authorizated = authorization.decodeToken(cookieToken, app)
+    authorizated = auth.decodeToken(cookieToken, app)
     if not authorizated:
         disconnect()
+        return
         
     jobId = data.get('jobId')
     if not jobId:
-        emit('statusUpdate', {"error": "No jobId provided"})
+        emit('statusUpdate', {'error': 'No jobId provided'})
         return
     
     sessionId = authorizated.get('session')
     if not sessionId:
-        emit('statusUpdate', {"error": "No jobId provided"})
+        emit('statusUpdate', {'error': 'No session provided'})
         return
-    
+
+    pubsub = r.pubsub()
+    pubsub.subscribe(jobId)
     previous_status = None
 
-    while True:
-        status = r.hget(jobId, "status")
-        sessionOwner = r.hget(jobId, "session")
+    try:
+        for message in pubsub.listen():
+            if message['type'] != 'message':
+                continue
 
-        if not status:
-            emit('statusUpdate', {"error": "Job not found"})
-            break
+            status = r.hget(jobId, 'status')
+            sessionOwner = r.hget(jobId, 'session')
 
-        if sessionOwner != sessionId:
-            disconnect() 
+            if not status:
+                emit('statusUpdate', {'error': 'Job not found'})
+                break
 
-        if status != previous_status:
-            emit('statusUpdate', {"uuid": jobId, "status": status})
-            previous_status = status
+            if sessionOwner != sessionId:
+                disconnect()
+                break
 
-        if status in ["O download do arquivo será iniciado em instantes.","O download do vídeo não pôde ser realizado."]:
-            break
+            if status != previous_status:
+                emit('statusUpdate', {'uuid': jobId, 'status': status})
+                previous_status = status
 
-        socketio.sleep(0.5)
-        
-    disconnect()
-    
-@app.route("/download/<jobId>")
+            if status in ['O download do arquivo será iniciado em instantes.','O download do vídeo não pôde ser realizado.']:
+                break
+    finally:
+        pubsub.unsubscribe(jobId)
+        pubsub.close()
+        disconnect()
+
+@app.route('/download/<jobId>')
 def downloadVideo(jobId):
-    folder = f"./files/{jobId}"
+    folder = f'./files/{jobId}'
     if not os.path.isdir(folder):
         return abort(404)
 
@@ -196,7 +204,7 @@ def processWrapper(taskData):
 def workerLoop():
     while True:
         try:
-            _, taskJson = r.brpop("download_queue")
+            _, taskJson = r.brpop('download_queue')
         except Exception as e:
             eventlet.sleep(1)
             continue
@@ -212,5 +220,5 @@ def workerLoop():
 
 socketio.start_background_task(workerLoop)
     
-if __name__ == "__main__":
-    socketio.run(app, host="0.0.0.0", port=5000)
+if __name__ == '__main__':
+    socketio.run(app, host='0.0.0.0', port=5000)
