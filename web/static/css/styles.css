@@ -80,22 +80,25 @@ input:focus {
 .checkbox-container {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    cursor: pointer;
+    cursor: not-allowed;
     width: min-content;
+    pointer-events: none;
 }
 
 input[type="checkbox"] {
     width: 1.125rem;
     height: 1.125rem;
     accent-color: #3b82f6;
-    cursor: pointer;
+    cursor: not-allowed;
+    pointer-events: none;
 }
 
 .checkbox-container label {
-    cursor: pointer;
+    cursor: not-allowed;
     font-weight: 500;
     margin-bottom: 0;
+    padding-left: 0.5rem;
+    pointer-events: none;
 }
 
 .format-label {
@@ -115,7 +118,6 @@ input[type="checkbox"] {
     flex: 1;
     display: flex;
     align-items: center;
-    gap: 0.75rem;
     padding: 0.875rem;
     background-color: #374151;
     border: 1px solid #475569;
@@ -144,6 +146,7 @@ input[type="radio"] {
     cursor: pointer;
     font-weight: 500;
     margin-bottom: 0;
+    padding-left: 0.75rem;
 }
 
 #download-btn, #login-btn {

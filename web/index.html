@@ -18,35 +18,32 @@
     <div class="container">
         <main>
             <h2>Baixar vídeo</h2>
-
-            <div class="form-group" style="margin-bottom: .7rem">
-                <label for="url" class="required">URL do vídeo:</label>
-                <input type="url" id="url" placeholder="Cole o link do vídeo aqui" required>
-            </div>
-
-            <div class="form-group">
-                <div class="checkbox-container">
-                    <input type="checkbox" id="playlist">
-                    <label for="playlist">Playlist</label>
+            <form id="form">
+                <div class="form-group" style="margin-bottom: .7rem">
+                    <label for="url" class="required">URL do vídeo:</label>
+                    <input type="url" id="url" placeholder="Cole o link do vídeo aqui" required>
                 </div>
-            </div>
-
-            <div class="form-group">
-                <p class="format-label">Formato:</p>
-                <div class="radio-group">
-                    <div class="radio-container">
-                        <input type="radio" id="mp4" name="format" value="1" checked>
-                        <label for="mp4">MP4</label>
-                    </div>
-                    <div class="radio-container">
-                        <input type="radio" id="mp3" name="format" value="2">
-                        <label for="mp3">MP3</label>
+                <div class="form-group">
+                    <div class="checkbox-container">
+                        <input type="checkbox" id="playlist">
+                        <label for="playlist">Playlist</label>
                     </div>
                 </div>
-            </div>
-
-            <button id="download-btn">Baixar</button>
-
+                <div class="form-group">
+                    <p class="format-label">Formato:</p>
+                    <div class="radio-group">
+                        <div class="radio-container">
+                            <input type="radio" id="mp4" name="format" value="1" checked>
+                            <label for="mp4">MP4</label>
+                        </div>
+                        <div class="radio-container">
+                            <input type="radio" id="mp3" name="format" value="2">
+                            <label for="mp3">MP3</label>
+                        </div>
+                    </div>
+                </div>
+                <button id="download-btn" type="submit">Baixar</button>
+            </form>
             <p id="status"></p>
         </main>
     </div>
@@ -72,16 +69,22 @@
     <script>
         function resetIu() {
             document.getElementById('download-btn').removeAttribute('disabled');
-            document.getElementById('status').textContent = '';
+            document.getElementById('url').value = '';
+            document.getElementById('playlist').checked = false;
         }
 
         document.getElementById('url').addEventListener('input', function (event) {
             if((event.target.value).toLowerCase().includes('playlist')){
                 document.getElementById('playlist').checked = true;
+            } else {
+                document.getElementById('playlist').checked = false;
             }
         });
 
-        document.getElementById('download-btn').addEventListener('click', async function () {
+        document.getElementById('form').addEventListener('submit', async function (event) {
+            event.preventDefault();
+            document.getElementById('status').textContent = '';
+
             const url = document.getElementById('url').value;
             const isPlaylist = document.getElementById('playlist').checked;
             const format = document.querySelector('input[name="format"]:checked').value;
@@ -118,9 +121,9 @@
 
                             socket.on('statusUpdate', (checkData) => {
                                 if (checkData.status) {
-                                    statusElement.textContent = checkData.status;
+                                    statusElement.textContent = checkData.msg;
 
-                                    if (checkData.status === 'O download do arquivo será iniciado em instantes.') {
+                                    if (checkData.status === 'finally') {
                                         const link = document.createElement('a');
                                         link.href = `/download/${jobId}`;
                                         link.download = '';
@@ -129,8 +132,7 @@
                                         socket.disconnect();
                                     }
 
-                                    if (checkData.status === 'O download do vídeo não pôde ser realizado.') {
-                                        statusElement.textContent = 'O download do vídeo não pôde ser realizado.';
+                                    if (checkData.status === 'error') {
                                         document.getElementById('download-btn').removeAttribute('disabled');
                                         socket.disconnect();
                                     }

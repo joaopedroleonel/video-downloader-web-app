@@ -13,4 +13,4 @@ RUN mkdir -p /app/files
 
 EXPOSE 5000
 
-CMD ["gunicorn", "-b", "0.0.0.0:5000", "main:app", "-k", "eventlet", "-w", "1"]
+CMD ["sh", "-c", "gunicorn -b 0.0.0.0:5000 main:app -k eventlet -w ${GUNICORN_WORKERS}"]

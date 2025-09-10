@@ -18,20 +18,20 @@ app = Flask(__name__, static_url_path='',  static_folder='web/static', template_
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
 socketio = SocketIO(app, async_mode='eventlet')
 
-redis_host = os.environ.get('REDIS_HOST')
-redis_port = int(os.environ.get('REDIS_PORT'))
-r = redis.Redis(host=redis_host, port=redis_port, db=0, decode_responses=True)
+redisHost = os.environ.get('REDIS_HOST')
+redisPort = int(os.environ.get('REDIS_PORT'))
+r = redis.Redis(host=redisHost, port=redisPort, db=0, decode_responses=True)
 pipe = r.pipeline()
 
 auth = Auth()
 clean = Clean()
 
-def start_cleaner():
+def startClean():
     eventlet.spawn_n(clean.cleanOldFolders)
 
-socketio.start_background_task(start_cleaner)
+socketio.start_background_task(startClean)
 
-sema = eventlet.semaphore.Semaphore(4)
+sema = eventlet.semaphore.Semaphore(int(os.getenv('SEMAPHORE_LIMIT')))
 
 def requireAuth(api=False):
     def decorador(func):
@@ -73,8 +73,13 @@ def processDownloads(taskData):
             taskData['session']
         )
     except Exception as e:
+        statusMsg = 'O download do vídeo não pôde ser realizado.'
+
+        if str(e) == 'O tamanho máximo da pasta de downloads foi atingido.':
+            statusMsg = str(e)
+    
         pipe.expire(jobId, int(os.getenv('DATA_REDIS_EXP_SECONDS')))
-        pipe.hset(jobId, mapping={'status': 'O download do vídeo não pôde ser realizado.', 'session': taskData['session']})
+        pipe.hset(jobId, mapping={'status': 'error', 'msg': statusMsg, 'session': taskData['session']})
         pipe.execute()
         
 
@@ -119,8 +124,11 @@ def initDownload():
             'session': sessionId
         }
 
-        r.hset(jobId, mapping={'status': 'Aguardando para ser processado.', 'session': sessionId})
-        r.lpush('download_queue', json.dumps(task))
+        pipe.expire(jobId, int(os.getenv('DATA_REDIS_EXP_SECONDS')))
+        pipe.hset(jobId, mapping={'status': 'open', 'msg': 'Aguardando para ser processado.', 'session': sessionId})
+        pipe.lpush('download_queue', json.dumps(task))
+        pipe.publish(jobId, 'updated')
+        pipe.execute()
 
         return jsonify({'uuid': jobId}), 200
     except Exception as e:
@@ -146,15 +154,14 @@ def checkStatus(data):
 
     pubsub = r.pubsub()
     pubsub.subscribe(jobId)
-    previous_status = None
+    previousStatusMsg = None
 
     try:
         for message in pubsub.listen():
             if message['type'] != 'message':
                 continue
 
-            status = r.hget(jobId, 'status')
-            sessionOwner = r.hget(jobId, 'session')
+            status, msg, sessionOwner = r.hmget(jobId, ['status', 'msg', 'session'])
 
             if not status:
                 emit('statusUpdate', {'error': 'Job not found'})
@@ -164,11 +171,11 @@ def checkStatus(data):
                 disconnect()
                 break
 
-            if status != previous_status:
-                emit('statusUpdate', {'uuid': jobId, 'status': status})
-                previous_status = status
+            if msg != previousStatusMsg:
+                emit('statusUpdate', {'uuid': jobId, 'status': status, 'msg': msg})
+                previousStatusMsg = msg
 
-            if status in ['O download do arquivo será iniciado em instantes.','O download do vídeo não pôde ser realizado.']:
+            if status in ['finally','error']:
                 break
     finally:
         pubsub.unsubscribe(jobId)
