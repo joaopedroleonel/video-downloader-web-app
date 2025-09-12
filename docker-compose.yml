@@ -4,7 +4,7 @@ services:
   web:
     build: .
     ports:
-      - "${WEB_PORT}:5000"
+      - "${WEB_PORT_EXTERNAL}:${WEB_PORT_INTERNAL}"
     env_file:
       - .env
     depends_on:

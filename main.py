@@ -1,18 +1,19 @@
 import eventlet
 eventlet.monkey_patch()
 
-from service import *
-from flask import Flask, redirect, request, render_template, url_for, Response, make_response, jsonify, abort, send_file
-from functools import wraps
 from dotenv import load_dotenv
 load_dotenv()
+
+from service import *
+from flask import Flask, redirect, request, render_template, url_for, Response, make_response, jsonify, abort, send_file
+from flask_socketio import SocketIO, emit, disconnect
+from functools import wraps
 from datetime import datetime
 import os
 import re
 import uuid
 import redis
 import json
-from flask_socketio import SocketIO, emit, disconnect
 
 app = Flask(__name__, static_url_path='',  static_folder='web/static', template_folder='web/')
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
@@ -26,10 +27,7 @@ pipe = r.pipeline()
 auth = Auth()
 clean = Clean()
 
-def startClean():
-    eventlet.spawn_n(clean.cleanOldFolders)
-
-socketio.start_background_task(startClean)
+socketio.start_background_task(clean.cleanOldFolders)
 
 sema = eventlet.semaphore.Semaphore(int(os.getenv('SEMAPHORE_LIMIT')))
 
@@ -56,31 +54,33 @@ def requireAuth(api=False):
                 if api:
                     return Response(status=401)
                 else:
-                    return redirect(url_for('auauthorizationth'))
+                    return redirect(url_for('authorization'))
 
             return func(*args, **kwargs)
         return wrapper
     return decorador
 
-def processDownloads(taskData):
-    jobId = taskData['uuid']
-    try:
-        Yt(r).download(
-            taskData['playlist'],
-            taskData['type'],
-            taskData['url'],
-            jobId,
-            taskData['session']
-        )
-    except Exception as e:
-        statusMsg = 'O download do vídeo não pôde ser realizado.'
+def processDownloads(taskData, gt):
+    with sema:
+        jobId = taskData['uuid']
+        
+        try:
+            Yt(r, gt).download(
+                taskData['playlist'],
+                taskData['type'],
+                taskData['url'],
+                jobId,
+                taskData['session']
+            )
+        except Exception as e:
+            statusMsg = 'Não foi possível realizar o download do vídeo.'
 
-        if str(e) == 'O tamanho máximo da pasta de downloads foi atingido.':
-            statusMsg = str(e)
-    
-        pipe.expire(jobId, int(os.getenv('DATA_REDIS_EXP_SECONDS')))
-        pipe.hset(jobId, mapping={'status': 'error', 'msg': statusMsg, 'session': taskData['session']})
-        pipe.execute()
+            if str(e) == 'O tamanho máximo da pasta de downloads foi atingido.':
+                statusMsg = str(e)
+        
+            pipe.expire(jobId, int(os.getenv('DATA_REDIS_EXP_SECONDS')))
+            pipe.hset(jobId, mapping={'status': 'error', 'msg': statusMsg, 'session': taskData['session']})
+            pipe.execute()
         
 
 @app.route('/', methods=['GET'])
@@ -112,8 +112,9 @@ def initDownload():
         sessionId = auth.decodeToken(request.cookies.get('token'), app).get('session')
         jobId = str(uuid.uuid4())
 
-        isUrl = re.match(r'^https?://[^\s/$.?#].[^\s]*$', data.get('url'))
-        if (data.get('type') not in [1, 2] or not isinstance(data.get('playlist'), bool) or not bool(isUrl)):
+        isValidUrl = re.match(r'^https?://(?:www\.)?(?:youtube\.com|youtu\.be)/[^\s]+$', data.get('url'))
+
+        if (data.get('type') not in [1, 2] or not isinstance(data.get('playlist'), bool) or not bool(isValidUrl)):
             abort(400)
 
         task = {
@@ -204,10 +205,6 @@ def downloadVideo(jobId):
 
     return send_file(filepath, as_attachment=True, download_name=safeName)
 
-def processWrapper(taskData):
-    with sema:
-        processDownloads(taskData)
-
 def workerLoop():
     while True:
         try:
@@ -223,9 +220,10 @@ def workerLoop():
         except:
             continue
 
-        eventlet.spawn_n(processWrapper, taskData)
+        gt = eventlet.spawn(processDownloads, taskData, None)
+        gt.args = (taskData, gt)
 
 socketio.start_background_task(workerLoop)
     
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=5000)
+    socketio.run(app, host='0.0.0.0', port=5000, debug=True)

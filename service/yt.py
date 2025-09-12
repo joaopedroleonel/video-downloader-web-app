@@ -6,9 +6,9 @@ import shutil
 from pathlib import Path
 
 class Yt:
-    def __init__(self, redis):
+    def __init__(self, redis, gt):
         self.r = redis
-        pass
+        self.gt = gt
     def download(self, playlist, type, url, id, session):
         pipe = self.r.pipeline()
         pipe.expire(id, int(os.getenv('DATA_REDIS_EXP_SECONDS')))
@@ -47,6 +47,10 @@ class Yt:
                 pipe.hset(id, mapping={'status': 'running', 'msg': f'{title}[{fmt}] foi processado com sucesso.', 'session': session})
                 pipe.publish(id, 'updated')
                 pipe.execute()
+            elif d['status'] == 'error':
+                pipe.hset(id, mapping={'status': 'error', 'msg': 'Não foi possível realizar o download do vídeo.', 'session': session})
+                pipe.publish(id, 'updated')
+                pipe.execute()
 
         outputPath = f'./files/{id}/%(playlist_title)s/%(title)s.%(ext)s' if playlist else f'./files/{id}/%(title)s.%(ext)s'
 
@@ -62,7 +66,8 @@ class Yt:
             'progress_hooks': [progressHook],
             'quiet': True,
             'progress_with_newline': True,
-            'no_color': True
+            'no_color': True,
+            "raise_on_error": True
         }
 
         ydl_opts_video = {
@@ -76,33 +81,35 @@ class Yt:
             'progress_hooks': [progressHook],
             'quiet': True,
             'progress_with_newline': True,
-            'no_color': True
+            'no_color': True,
+            "raise_on_error": True
         }
         
         opts = ydl_opts_video if type == 1 else ydl_opts_audio
 
-        with YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(url)
-            filename = ydl._prepare_filename(info)
+        try:
+            with YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(url)
+                filename = ydl._prepare_filename(info)
 
-            if playlist:
-                originPath = filename.replace('NA/', '').replace('.NA', '')
-                self.sanitizeFolderFiles(originPath)
-                shutil.make_archive(originPath, 'zip', originPath)
-                shutil.rmtree(originPath)
-            
-            pipe.hset(id, mapping={'status': 'finally', 'msg': 'O download do arquivo será iniciado em instantes.', 'session': session})
+                if playlist:
+                    originPath = filename.replace('NA/', '').replace('.NA', '')
+                    self.sanitizeFolderFiles(originPath)
+                    shutil.make_archive(originPath, 'zip', originPath)
+                    shutil.rmtree(originPath)
+                
+                pipe.hset(id, mapping={'status': 'finally', 'msg': 'O download do arquivo será iniciado em instantes.', 'session': session})
+                pipe.publish(id, 'updated')
+                pipe.execute()
+        except:
+            pipe.hset(id, mapping={'status': 'error', 'msg': 'Não foi possível realizar o download do vídeo.', 'session': session})
             pipe.publish(id, 'updated')
             pipe.execute()
-            return
+        
+        self.gt.kill()
 
-        pipe.hset(id, mapping={'status': 'error', 'status': 'O download do vídeo não pôde ser realizado.', 'session': session})
-        pipe.publish(id, 'updated')
-        pipe.execute()
-        return
-
-    def sanitizeFolderFiles(self, folder_path):
-        for root, dirs, files in os.walk(folder_path):
+    def sanitizeFolderFiles(self, folderPath):
+        for root, dirs, files in os.walk(folderPath):
             for name in files:
                 safeName = re.sub(r'[^\w\s\-.]', '_', name, flags=re.UNICODE)
                 if name != safeName:
