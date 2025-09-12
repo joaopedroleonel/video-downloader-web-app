@@ -31,14 +31,40 @@ Uma aplicação web para download de vídeos e áudios de URLs (incluindo playli
 Crie um arquivo `.env` com:
 
 ```dotenv
-WEB_PORT=5000
-REDIS_PORT=6379
-SECRET_KEY=uma_chave_secreta
-KEY_JWT=uma_chave_jwt
+# Chave usada para assinar e validar JWTs
+KEY_JWT=chave_super_secreta_jwt
+
+# Senha usada para autenticação
+CORRECT_PASSWORD=senha_forte_aqui
+
+# Tempo de expiração do JWT em minutos
 JWT_EXP_MINUTES=60
-CORRECT_PASSWORD=sua_senha
-REDIS_HOST=redis
+
+# Tempo de expiração para links de arquivos (em minutos)
+FILES_EXP_MINUTES=120
+
+# Tempo de expiração dos dados no Redis (em segundos)
+DATA_REDIS_EXP_SECONDS=3600
+
+# Limite máximo de download em bytes (ex: 50MB = 52428800)
+MAX_DOWNLOAD_BYTES=52428800
+
+# Limite de requisições simultâneas com semáforo
+SEMAPHORE_LIMIT=10
+
+# Chave secreta para a aplicação
+SECRET_KEY=chave_super_secreta_app
+
+# Configuração de conexão com o Redis
+REDIS_HOST=localhost
 REDIS_PORT=6379
+
+# Portas da aplicação
+WEB_PORT_EXTERNAL=8080   # Porta exposta para o usuário final
+WEB_PORT_INTERNAL=8000   # Porta interna usada pelo container/servidor
+
+# Número de workers do Gunicorn (processos para lidar com requisições)
+GUNICORN_WORKERS=4
 ````
 
 ### 2. Build & Run com Docker
