@@ -174,4 +174,15 @@ docker-compose up -d
 * Logs são coletados pelo **Promtail** e enviados ao **Loki**
 * Métricas de containers e aplicação são expostas ao **Prometheus** e visualizadas no **Grafana**
 * Os valores de Redis no `.env` (REDIS_HOST, REDIS_PORT, REDIS_DB) já correspondem aos padrões usados pelo container Redis do Docker Compose
-* Os logs do Nginx registram apenas requisições bloqueadas (HTTP 429) e os limites de requisições (`limit_req`) e conexões (`limit_conn`) estão configurados no arquivo `nginx.conf`.
+* Os logs do Nginx registram apenas requisições bloqueadas (HTTP 429) e os limites de requisições (`limit_req`) e conexões (`limit_conn`) estão configurados no arquivo `nginx.conf`
+
+## Interfaces
+
+### Página de Login
+![Página de Login](images/auth-page.jpg)
+
+### Página de Download de Vídeos
+![Página Inicial](images/home-page.jpg)
+
+### Dashboard do Grafana
+![Dashboard Grafana](images/grafana-dashboards.jpg)
