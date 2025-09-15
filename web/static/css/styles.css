@@ -22,7 +22,7 @@ body {
     padding: 2rem 1rem;
 }
 
-main {
+section {
     background-color: #1e293b;
     border-radius: 1rem;
     padding: 2.5rem;
@@ -235,7 +235,7 @@ label {
 }
 
 @media (max-width: 640px) {
-    main {
+    section {
         padding: 2rem;
     }
 

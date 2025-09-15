@@ -1,7 +1,8 @@
-import jwt
-import uuid
 from dotenv import load_dotenv 
 load_dotenv()
+
+import jwt
+import uuid
 import os
 from datetime import datetime, timedelta, timezone
 
@@ -9,7 +10,6 @@ class Auth:
     def __init__(self):
         self.key = os.getenv('KEY_JWT')
         self.correctPassword = os.getenv('CORRECT_PASSWORD')
-        pass
 
     def checkPassword(self, password):
         if password == self.correctPassword:

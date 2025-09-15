@@ -12,8 +12,8 @@
     <meta name="robots" content="noindex, nofollow">
 </head>
 <body>
-    <div class="container">
-        <main class="download-box">
+    <main class="container">
+        <section class="download-box">
             <form id="form" class="form-group" style="margin-bottom: 0px !important;">
                 <label for="password" class="required">Senha:</label>
                 <input type="text" id="password" placeholder="Digite a senha aqui" required>
@@ -23,8 +23,8 @@
             </form>
 
             <p id="text-error">Senha incorreta.</p>
-        </main>
-    </div>
+        </section>
+    </main>
     <script src="{{ url_for('static', filename='js/auth.min.js') }}"></script>
 </body>
 </html>

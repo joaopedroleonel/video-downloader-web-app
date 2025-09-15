@@ -14,14 +14,18 @@ import re
 import uuid
 import redis
 import json
+import logging
 
 app = Flask(__name__, static_url_path='',  static_folder='web/static', template_folder='web/')
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
 socketio = SocketIO(app, async_mode='eventlet')
 
+logging.basicConfig(level=logging.INFO)
+
 redisHost = os.environ.get('REDIS_HOST')
 redisPort = int(os.environ.get('REDIS_PORT'))
-r = redis.Redis(host=redisHost, port=redisPort, db=0, decode_responses=True)
+redisDb = int(os.environ.get('REDIS_DB'))
+r = redis.Redis(host=redisHost, port=redisPort, db=redisDb, decode_responses=True)
 pipe = r.pipeline()
 
 auth = Auth()
@@ -31,7 +35,7 @@ socketio.start_background_task(clean.cleanOldFolders)
 
 sema = eventlet.semaphore.Semaphore(int(os.getenv('SEMAPHORE_LIMIT')))
 
-def requireAuth(api=False):
+def requireAuth(api):
     def decorador(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -60,29 +64,31 @@ def requireAuth(api=False):
         return wrapper
     return decorador
 
-def processDownloads(taskData, gt):
-    with sema:
-        jobId = taskData['uuid']
-        
-        try:
-            Yt(r, gt).download(
-                taskData['playlist'],
-                taskData['type'],
-                taskData['url'],
-                jobId,
-                taskData['session']
-            )
-        except Exception as e:
-            statusMsg = 'Não foi possível realizar o download do vídeo.'
+@app.before_request
+def logRequest():
+    xff = request.headers.get('X-Forwarded-For', '')
+    clientIp = xff.split(',')[0].strip() if xff else request.remote_addr
+    body = None
 
-            if str(e) == 'O tamanho máximo da pasta de downloads foi atingido.':
-                statusMsg = str(e)
-        
-            pipe.expire(jobId, int(os.getenv('DATA_REDIS_EXP_SECONDS')))
-            pipe.hset(jobId, mapping={'status': 'error', 'msg': statusMsg, 'session': taskData['session']})
-            pipe.execute()
-        
+    if request.method in ['POST', 'PUT', 'PATCH']:
+        contentType = request.headers.get('Content-Type', '')
+        if 'application/json' in contentType:
+            try:
+                body = request.get_json(silent=True)
+            except Exception as e:
+                body = f"Erro ao ler JSON: {e}"
 
+    logEntry = {
+        "type": "HTTP",
+        "ip": clientIp,
+        "method": request.method,
+        "path": request.path,
+        "user_agent": request.user_agent.string,
+        "body": body
+    }
+
+    logging.info(json.dumps(logEntry))
+        
 @app.route('/', methods=['GET'])
 @requireAuth(api=False)
 def home():
@@ -135,6 +141,40 @@ def initDownload():
     except Exception as e:
         return Response(status=400)
 
+@app.route('/download/<jobId>')
+def downloadVideo(jobId):
+    folder = f'./files/{jobId}'
+    if not os.path.isdir(folder):
+        return abort(404)
+
+    files = os.listdir(folder)
+    if not files:
+        return abort(404)
+
+    filename = files[0]
+    name, ext = os.path.splitext(filename)
+    safeName = re.sub(r'[^\w\s\-.]', '_', name) + ext
+    filepath = os.path.join(folder, filename)
+
+    if filename != safeName:
+        newpath = os.path.join(folder, safeName)
+        os.rename(filepath, newpath)
+        filepath = newpath
+
+    return send_file(filepath, as_attachment=True, download_name=safeName)
+
+@socketio.on('connect')
+def handleConnect():
+    logEntry = {
+        "type": "SOCKET",
+        "action": "CONNECT",
+        "sid": request.sid,
+        "ip": request.remote_addr if request else "N/A",
+        "user_agent": request.headers.get('User-Agent', '')
+    }
+    
+    logging.info(json.dumps(logEntry))
+
 @socketio.on('checkStatus')
 def checkStatus(data):
     cookieToken = request.cookies.get('token')
@@ -183,27 +223,27 @@ def checkStatus(data):
         pubsub.close()
         disconnect()
 
-@app.route('/download/<jobId>')
-def downloadVideo(jobId):
-    folder = f'./files/{jobId}'
-    if not os.path.isdir(folder):
-        return abort(404)
+def processDownloads(taskData, gt):
+    with sema:
+        jobId = taskData['uuid']
+        
+        try:
+            Yt(r, gt).download(
+                taskData['playlist'],
+                taskData['type'],
+                taskData['url'],
+                jobId,
+                taskData['session']
+            )
+        except Exception as e:
+            statusMsg = 'Não foi possível realizar o download do vídeo.'
 
-    files = os.listdir(folder)
-    if not files:
-        return abort(404)
+            if str(e) == 'O tamanho máximo da pasta de downloads foi atingido.':
+                statusMsg = str(e)
 
-    filename = files[0]
-    name, ext = os.path.splitext(filename)
-    safeName = re.sub(r'[^\w\s\-.]', '_', name) + ext
-    filepath = os.path.join(folder, filename)
-
-    if filename != safeName:
-        newpath = os.path.join(folder, safeName)
-        os.rename(filepath, newpath)
-        filepath = newpath
-
-    return send_file(filepath, as_attachment=True, download_name=safeName)
+            pipe.expire(jobId, int(os.getenv('DATA_REDIS_EXP_SECONDS')))
+            pipe.hset(jobId, mapping={'status': 'error', 'msg': statusMsg, 'session': taskData['session']})
+            pipe.execute()
 
 def workerLoop():
     while True:
@@ -226,4 +266,4 @@ def workerLoop():
 socketio.start_background_task(workerLoop)
     
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+    socketio.run(app)

@@ -1,22 +1,120 @@
 version: '3.8'
 
+volumes:
+  grafana-data:
+    driver: local
+  prometheus-data:
+    driver: local
+  loki-data:
+    driver: local
+
+networks:
+  web_net:
+    driver: bridge
+  metrics:
+    driver: bridge
+  monitoring:
+    driver: bridge
+
 services:
-  web:
+  flask:
     build: .
-    ports:
-      - "${WEB_PORT_EXTERNAL}:${WEB_PORT_INTERNAL}"
+    container_name: flask
     env_file:
       - .env
     depends_on:
       - redis
+      - promtail
     networks:
-      - internal_net
+      - web_net
+      - monitoring
+
+  nginx:
+    image: nginx:stable
+    container_name: nginx_proxy
+    env_file:
+      - .env
+    ports:
+      - "80:80"
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - flask
+    networks:
+      - web_net
+      - monitoring
 
   redis:
-    image: redis:7-alpine
+    image: redis:8.0
+    container_name: redis
     networks:
-      - internal_net
+      - web_net
 
-networks:
-  internal_net:
-    driver: bridge
+  promtail:
+    image: grafana/promtail:3.5.5
+    container_name: promtail
+    volumes:
+      - /var/log:/var/log
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - ./infra/promtail/config.yml:/etc/promtail/config.yml:ro
+    networks:
+      - metrics
+      - monitoring
+    depends_on:
+      - loki
+
+  loki:
+    image: grafana/loki:3.5.5
+    container_name: loki
+    command: -config.file=/etc/loki/local-config.yaml -log.level=error
+    networks:
+      - metrics
+    volumes:
+      - loki-data:/loki
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    container_name: prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+      - --storage.tsdb.retention.size=2GB
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - metrics
+    depends_on:
+      - cadvisor
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.52.1 
+    container_name: cadvisor
+    volumes:
+      - /:/rootfs:ro
+      - /run:/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    devices:
+      - /dev/kmsg
+    privileged: true
+    networks:
+      - metrics
+
+  grafana:
+    image: grafana/grafana:12.1.1 
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning
+      - grafana-data:/var/lib/grafana
+    env_file:
+      - .env
+    networks:
+      - metrics
+    privileged: true
+    depends_on:
+      - prometheus
+      - loki
