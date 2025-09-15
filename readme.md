@@ -130,6 +130,10 @@ docker-compose up -d
 │   ├── auth.html
 │   └── index.html
 ├── files/                      # Pasta temporária para downloads
+├── images/                     # Capturas de tela da aplicação
+│   ├── auth-page.jpg
+│   ├── home-page.jpg
+│   └── grafana-dashboards.jpg
 └── infra/                      # Infraestrutura e monitoramento
     ├── grafana/provisioning/   # Provisionamento do Grafana
     │   ├── dashboards/
