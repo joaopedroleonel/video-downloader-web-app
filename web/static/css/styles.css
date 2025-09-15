@@ -234,6 +234,34 @@ label {
     width: 100%;
 }
 
+.password-container {
+    position: relative;
+    width: 100%;
+}
+
+.password-container input {
+    width: 100%;
+    padding-right: 40px;
+    box-sizing: border-box;
+}
+
+.toggle-password {
+    position: absolute;
+    top: 50%;
+    right: 10px;
+    transform: translateY(-50%);
+    cursor: pointer;
+    color: #9ca3af;
+    font-size: 1rem;
+}
+
+input[type="password"]::-webkit-inner-spin-button,
+input[type="password"]::-webkit-clear-button,
+input[type="password"]::-webkit-password-toggle-button {
+    -webkit-appearance: none;
+    display: none;
+}
+
 @media (max-width: 640px) {
     section {
         padding: 2rem;

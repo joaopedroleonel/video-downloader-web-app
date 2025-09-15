@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Video Downloader</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/all.min.css') }}">
     <link rel="shortcut icon" href="{{ url_for('static', filename='images/icon.svg') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,7 +17,10 @@
         <section class="download-box">
             <form id="form" class="form-group" style="margin-bottom: 0px !important;">
                 <label for="password" class="required">Senha:</label>
-                <input type="text" id="password" placeholder="Digite a senha aqui" required>
+                <div class="password-container">
+                    <input type="password" id="password" placeholder="Digite a senha aqui" required>
+                    <i class="fas fa-eye toggle-password" id="togglePassword"></i>
+                </div>
                 <button id="login-btn" style="margin-bottom: 10px; margin-top: 10px;">
                     Confirmar
                 </button>
@@ -26,5 +30,17 @@
         </section>
     </main>
     <script src="{{ url_for('static', filename='js/auth.min.js') }}"></script>
+    <script>
+        const togglePassword = document.querySelector('#togglePassword');
+        const password = document.querySelector('#password');
+
+        togglePassword.addEventListener('click', () => {
+            const type = password.getAttribute('type') === 'password' ? 'text' : 'password';
+            password.setAttribute('type', type);
+
+            togglePassword.classList.toggle('fa-eye');
+            togglePassword.classList.toggle('fa-eye-slash');
+        });
+    </script>
 </body>
 </html>
