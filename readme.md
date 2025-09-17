@@ -1,6 +1,6 @@
 # Video Downloader Web App
 
-Uma aplicação web para download de vídeos e áudios de URLs (incluindo playlists), com suporte a filas de tarefas via Redis, atualização de status em tempo real via WebSocket, download de arquivos processados, além de monitoramento com Prometheus, Grafana, Loki, Promtail e cAdvisor.
+Uma aplicação web para download de vídeos e áudios de URLs (incluindo playlists), com suporte a filas de tarefas via Redis, atualização de status em tempo real via WebSocket, download de arquivos processados, além de monitoramento com Prometheus, Grafana, Loki, Alloy e cAdvisor.
 
 ## Funcionalidades
 
@@ -15,7 +15,7 @@ Uma aplicação web para download de vídeos e áudios de URLs (incluindo playli
 * Proxy reverso com Nginx
 * Monitoramento e métricas com Prometheus e cAdvisor
 * Visualização de métricas e logs no Grafana
-* Centralização de logs com Loki + Promtail
+* Centralização de logs com Loki + Alloy
 
 ## Tecnologias
 
@@ -31,7 +31,7 @@ Uma aplicação web para download de vídeos e áudios de URLs (incluindo playli
 * Prometheus
 * Grafana
 * Loki
-* Promtail
+* Alloy
 * cAdvisor
 
 ## Configuração
@@ -142,7 +142,7 @@ docker-compose up -d
     │   └── datasources/datasource.yml
     ├── nginx/nginx.conf        # Configuração do Nginx
     ├── prometheus/prometheus.yml # Configuração do Prometheus
-    └── promtail/config.yml     # Configuração do Promtail
+    └── alloy/config.alloy     # Configuração do Alloy
 ```
 
 ## Endpoints da aplicação
@@ -175,7 +175,7 @@ docker-compose up -d
 * `gunicorn` roda com Eventlet (`-k eventlet`) para suportar WebSocket
 * Limite de downloads simultâneos definido por SEMAPHORE_LIMIT no .env
 * Suporta apenas URLs do YouTube (`youtube.com` / `youtu.be`), conforme validação do regex presente em `/initDownload`
-* Logs são coletados pelo **Promtail** e enviados ao **Loki**
+* Logs são coletados pelo **Alloy** e enviados ao **Loki**
 * Métricas de containers e aplicação são expostas ao **Prometheus** e visualizadas no **Grafana**
 * Os valores de Redis no `.env` (REDIS_HOST, REDIS_PORT, REDIS_DB) já correspondem aos padrões usados pelo container Redis do Docker Compose
 * Os logs do Nginx registram apenas requisições bloqueadas (HTTP 429) e os limites de requisições (`limit_req`) e conexões (`limit_conn`) estão configurados no arquivo `nginx.conf`

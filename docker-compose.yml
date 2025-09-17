@@ -1,21 +1,4 @@
-version: '3.8'
-
-volumes:
-  grafana-data:
-    driver: local
-  prometheus-data:
-    driver: local
-  loki-data:
-    driver: local
-
-networks:
-  web_net:
-    driver: bridge
-  metrics:
-    driver: bridge
-  monitoring:
-    driver: bridge
-
+version: '3.9'
 services:
   flask:
     build: .
@@ -24,10 +7,8 @@ services:
       - .env
     depends_on:
       - redis
-      - promtail
     networks:
       - web_net
-      - monitoring
 
   nginx:
     image: nginx:stable
@@ -42,7 +23,6 @@ services:
       - flask
     networks:
       - web_net
-      - monitoring
 
   redis:
     image: redis:8.0
@@ -50,16 +30,16 @@ services:
     networks:
       - web_net
 
-  promtail:
-    image: grafana/promtail:3.5.5
-    container_name: promtail
+  alloy:
+    image: grafana/alloy:v1.10.2
+    container_name: alloy
     volumes:
-      - /var/log:/var/log
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
-      - ./infra/promtail/config.yml:/etc/promtail/config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./infra/alloy/config.alloy:/etc/alloy/config.alloy
+    command: run /etc/alloy/config.alloy
     networks:
       - metrics
-      - monitoring
     depends_on:
       - loki
 
@@ -114,7 +94,20 @@ services:
       - .env
     networks:
       - metrics
-    privileged: true
     depends_on:
       - prometheus
       - loki
+
+volumes:
+  grafana-data:
+    driver: local
+  prometheus-data:
+    driver: local
+  loki-data:
+    driver: local
+
+networks:
+  web_net:
+    driver: bridge
+  metrics:
+    driver: bridge
