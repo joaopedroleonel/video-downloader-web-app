@@ -67,7 +67,9 @@ class Yt:
             'quiet': True,
             'progress_with_newline': True,
             'no_color': True,
-            "raise_on_error": True
+            'raise_on_error': True,
+            "progress": False,
+            'logger': None
         }
 
         ydl_opts_video = {
@@ -82,7 +84,9 @@ class Yt:
             'quiet': True,
             'progress_with_newline': True,
             'no_color': True,
-            "raise_on_error": True
+            'raise_on_error': True,
+            "progress": False,
+            'logger': None
         }
         
         opts = ydl_opts_video if type == 1 else ydl_opts_audio

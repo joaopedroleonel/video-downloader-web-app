@@ -74,6 +74,8 @@ document.getElementById('form').addEventListener('submit', async function (event
                         }
                     });
                 }
+            } else if(response.status == '401'){
+                window.location.reload();
             } else {
                 statusElement.textContent = 'Não foi possível realizar o download do vídeo.';
                 document.getElementById('download-btn').removeAttribute('disabled');

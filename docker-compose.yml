@@ -12,7 +12,7 @@ services:
 
   nginx:
     image: nginx:stable
-    container_name: nginx_proxy
+    container_name: nginx
     env_file:
       - .env
     ports:

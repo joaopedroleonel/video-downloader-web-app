@@ -20,7 +20,7 @@ app = Flask(__name__, static_url_path='',  static_folder='web/static', template_
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
 socketio = SocketIO(app, async_mode='eventlet')
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format="%(message)s")
 
 redisHost = os.environ.get('REDIS_HOST')
 redisPort = int(os.environ.get('REDIS_PORT'))
@@ -64,30 +64,38 @@ def requireAuth(api):
         return wrapper
     return decorador
 
-@app.before_request
-def logRequest():
+@app.after_request
+def logResponse(response):
     xff = request.headers.get('X-Forwarded-For', '')
     clientIp = xff.split(',')[0].strip() if xff else request.remote_addr
+    contentType = request.headers.get('Content-Type', '')
     body = None
+    responseJson = None
 
-    if request.method in ['POST', 'PUT', 'PATCH']:
-        contentType = request.headers.get('Content-Type', '')
-        if 'application/json' in contentType:
-            try:
-                body = request.get_json(silent=True)
-            except Exception as e:
-                body = f"Erro ao ler JSON: {e}"
+    if 'application/json' in contentType:
+        try:
+            body = request.get_json(silent=True)
+
+            if body.get('password'):
+                body = {'password': '******'}
+
+            if response.is_json:
+                responseJson = response.get_json(silent=True)
+        except:
+            body = None
 
     logEntry = {
-        "type": "HTTP",
-        "ip": clientIp,
-        "method": request.method,
-        "path": request.path,
-        "user_agent": request.user_agent.string,
-        "body": body
+        'type': 'HTTP',
+        'ip': clientIp,
+        'method': request.method,
+        'path': request.path,
+        'body': body,
+        'status': response.status_code,
+        'response_json': responseJson
     }
 
     logging.info(json.dumps(logEntry))
+    return response
         
 @app.route('/', methods=['GET'])
 @requireAuth(api=False)
@@ -96,6 +104,16 @@ def home():
 
 @app.route('/auth', methods=['GET', 'POST'])
 def authorization():
+    cookieToken = request.cookies.get('token')
+    
+    if cookieToken:
+        try:
+            data = auth.decodeToken(cookieToken, app)
+            if data.get('session'):
+                return redirect(url_for('home'))
+        except:
+            pass
+
     if request.method == 'GET':
         return render_template('auth.html')
     else:
@@ -163,18 +181,6 @@ def downloadVideo(jobId):
 
     return send_file(filepath, as_attachment=True, download_name=safeName)
 
-@socketio.on('connect')
-def handleConnect():
-    logEntry = {
-        "type": "SOCKET",
-        "action": "CONNECT",
-        "sid": request.sid,
-        "ip": request.remote_addr if request else "N/A",
-        "user_agent": request.headers.get('User-Agent', '')
-    }
-    
-    logging.info(json.dumps(logEntry))
-
 @socketio.on('checkStatus')
 def checkStatus(data):
     cookieToken = request.cookies.get('token')
@@ -217,6 +223,14 @@ def checkStatus(data):
                 previousStatusMsg = msg
 
             if status in ['finally','error']:
+                logEntry = {
+                    'type': 'Download',
+                    'uuid': jobId,
+                    'status': status,
+                    'msg': msg
+                }
+
+                logging.info(json.dumps(logEntry))
                 break
     finally:
         pubsub.unsubscribe(jobId)
